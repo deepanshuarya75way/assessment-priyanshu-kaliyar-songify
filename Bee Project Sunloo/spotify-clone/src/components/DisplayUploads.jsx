@@ -6,6 +6,7 @@ import SongItem from './SongItem'
 import { API_URL } from '../config/api'
 import { useNavigate } from 'react-router-dom'
 import UploadSongModal from './UploadSongModal';
+import { io } from 'socket.io-client';
 
 const DisplayUploads = () => {
   const navigate = useNavigate()
@@ -139,6 +140,45 @@ const DisplayUploads = () => {
 
     fetchUserUploads()
   }, [navigate])
+  //Added new
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if(!token) return;
+    let currentUserId;
+    try{
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      currentUserId = payload.id || payload._id || payload.sub;
+    } catch (error) {
+      console.error('Invalid token');
+      return;
+    }
+    const socket = io(API_URL, {
+      auth: { token },
+      transports: ['websocket', 'polling']
+    });
+    socket.on('connect', () => {
+      console.log('Uploads socket connected:', socket.id);
+    });
+    socket.on('connect_error', (error) => {
+      console.error('Uploads socket error:',error.message);
+    });
+    const handleNewSong = (song) => {
+      if(!song || !song._id) return;
+      const uploadedId = song.uploadedBy?.id;
+      if(String(uploadedId) !== String(currentUserId)) return;
+      setUserSongs((prevSongs) => {
+        if(prevSongs.some(s => String(s._id) === song._id)){
+          return prevSongs;
+        }
+        return [song, ...prevSongs];
+      });
+    };
+    socket.on('song:new', handleNewSong);
+    return () => {
+      socket.off('song:new', handleNewSong);
+      socket.disconnect();
+    };
+  []});
 
   // Map user songs to include original index from allSongs for playback
   const userSongsWithIndex = userSongs.map(userSong => {
@@ -169,6 +209,16 @@ const DisplayUploads = () => {
     if (!response.ok || !data.success) {
       throw new Error(data.message || 'Upload failed');
     }
+
+    // Added Now
+
+    const uploadedSong = data.song;
+    setUserSongs((prevSongs) => {
+      if(prevSongs.some(song => song.id === uploadedSong._id)){
+        return prevSongs;
+      }
+    })
+    return [uploadedSong, ...prevSongs];
     // Optionally, refresh uploads after successful upload
   };
 

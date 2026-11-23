@@ -124,6 +124,8 @@ io.use(async (socket, next) => {
 });
 
 io.on('connection', (socket) => {
+  //Added New
+  socket.join(`user:${socket.data.user.id}`);
   console.log(`User connected: ${socket.data.user.name} (${socket.data.user.id})`);
   
   socket.on('chat:send', async (payload = {}, ack) => {
